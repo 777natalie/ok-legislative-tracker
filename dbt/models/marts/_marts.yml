@@ -1,6 +1,29 @@
 version: 2
 
 models:
+  - name: dim_legislators
+    columns:
+      - name: people_id
+        data_tests:
+          - unique
+          - not_null
+
+  - name: fct_unity_votes
+    columns:
+      - name: roll_call_id
+        data_tests:
+          - not_null
+      - name: people_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_legislators')
+                field: people_id
+      - name: voted_with_party
+        data_tests:
+          - not_null
+
   - name: legislator_party_unity
     columns:
       - name: session_id
