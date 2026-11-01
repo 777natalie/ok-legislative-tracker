@@ -100,6 +100,12 @@ ORDER BY votes_cast DESC;
 
 **Data quality checks passing (dbt, 18 of 18):** every roll call's vote rows match LegiScan's `total`; no legislator votes twice on one roll call; every vote links to a real roll call and a real person.
 
+## Party-line votes
+
+Of 3,131 final passage roll calls, **565 (18%) were party unity votes**: a majority of Republicans voted opposite a majority of Democrats (Yea and Nay only; definition adapted from [Voteview](https://voteview.com/articles/party_unity_scores)). The other 2,566 had both party majorities on the same side.
+
+This is enough party-line votes to calculate a party unity score for each legislator. Built in `int_party_positions`.
+
 ## Open questions
 
 - [ ] What do `vote_id` 3 and 4 mean? (Likely "NV" and "Absent"; confirm from `vote_text`.)
