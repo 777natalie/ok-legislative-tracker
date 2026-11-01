@@ -66,6 +66,40 @@ Confirmed by reading downloaded files, not from memory.
 - `status: 2` matched "Engrossed, signed, to Senate" on the bill's `status_date`.
 - `completed: 0` with session `sine_die: 1` means the bill never finished before the session ended.
 
+## Party voting on final passage
+
+How often each party voted "Nay" on final passage votes (third and fourth reading), counting only Yea and Nay votes.
+
+| Party | Yea/Nay votes cast | Nays | % Nay |
+|---|---|---|---|
+| Republican | 179,446 | 16,718 | 9.3% |
+| Democrat | 38,393 | 6,907 | 18.0% |
+
+**Takeaways**
+
+- Democrats voted "Nay" about twice as often as Republicans (18.0% vs. 9.3%).
+- About 82% of these votes were cast by Republicans, roughly matching their share of seats. This served as a sanity check on the join.
+- Only two parties appear. No other party cast final passage votes in this session.
+- These are overall rates. They do not show whether the parties voted against each other on the same roll call. That needs a per-roll-call comparison (next step: `int_party_majority_position`).
+
+**Query**
+
+```sql
+SELECT p.party,
+       COUNT(*) AS votes_cast,
+       SUM(CASE WHEN v.vote_text = 'Nay' THEN 1 ELSE 0 END) AS nays,
+       ROUND(100.0 * SUM(CASE WHEN v.vote_text = 'Nay' THEN 1 ELSE 0 END) / COUNT(*), 1) AS pct_nay
+FROM analytics_staging.stg_votes v
+JOIN analytics_staging.stg_roll_calls r ON r.roll_call_id = v.roll_call_id
+JOIN analytics_staging.stg_people p     ON p.people_id    = v.people_id
+WHERE r.vote_category = 'final_passage'
+  AND v.vote_text IN ('Yea', 'Nay')
+GROUP BY p.party
+ORDER BY votes_cast DESC;
+```
+
+**Data quality checks passing (dbt, 18 of 18):** every roll call's vote rows match LegiScan's `total`; no legislator votes twice on one roll call; every vote links to a real roll call and a real person.
+
 ## Open questions
 
 - [ ] What do `vote_id` 3 and 4 mean? (Likely "NV" and "Absent"; confirm from `vote_text`.)
