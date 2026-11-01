@@ -106,6 +106,12 @@ Of 3,131 final passage roll calls, **565 (18%) were party unity votes**: a major
 
 This is enough party-line votes to calculate a party unity score for each legislator. Built in `int_party_positions`.
 
+## Party unity by legislator
+
+Built in `legislator_party_unity` (marts). Party unity score = share of party-line votes (565 final passage roll calls) where the legislator voted with their party's majority. Legislators with fewer than 50 party-line votes are excluded from rankings to avoid small samples.
+
+Lowest scores in the 2026 session ranged from 41.1% to about 75%, and included both Democrats and Republicans. A low score means the legislator often voted with the other party's majority; the data alone does not explain why. Next: list the specific bills where each legislator broke from their party.
+
 ## Open questions
 
 - [ ] What do `vote_id` 3 and 4 mean? (Likely "NV" and "Absent"; confirm from `vote_text`.)
