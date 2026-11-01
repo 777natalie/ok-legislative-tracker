@@ -1,29 +1,14 @@
 import base64
 import io
 import json
-import os
 import zipfile
 from pathlib import Path
 
-import requests
-from dotenv import load_dotenv
+from legiscan_client import call_api
 
-load_dotenv()
-API_KEY = os.getenv("LEGISCAN_API_KEY")
-API_URL = "https://api.legiscan.com/"
 SESSION_ID = 2219  # 2026 Regular Session
 STATE_FILE = Path("data/state.json")
 OUT_DIR = Path(f"data/raw/dataset_{SESSION_ID}")
-
-
-def call_api(op, **params):
-    """Call one LegiScan operation and return the JSON, or stop on an error."""
-    response = requests.get(API_URL, params={"key": API_KEY, "op": op, **params}, timeout=60)
-    response.raise_for_status()
-    data = response.json()
-    if data["status"] != "OK":
-        raise SystemExit(f"LegiScan error on {op}: {data}")
-    return data
 
 
 def load_state():
