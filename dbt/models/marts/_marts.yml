@@ -3,9 +3,11 @@ version: 2
 models:
   - name: legislator_party_unity
     columns:
+      - name: session_id
+        data_tests:
+          - not_null
       - name: people_id
         data_tests:
-          - unique
           - not_null
       - name: party
         data_tests:

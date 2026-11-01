@@ -1,6 +1,7 @@
 with final_votes as (
     select
         v.roll_call_id,
+        b.session_id,
         p.party,
         v.vote_text
     from {{ ref('stg_votes') }} as v
@@ -8,6 +9,8 @@ with final_votes as (
         on p.people_id = v.people_id
     join {{ ref('stg_roll_calls') }} as r
         on r.roll_call_id = v.roll_call_id
+    join {{ ref('stg_bills') }} as b
+        on b.bill_id = r.bill_id
     where r.vote_category = 'final_passage'
       and v.vote_text in ('Yea', 'Nay')
 ),
@@ -15,16 +18,18 @@ with final_votes as (
 party_counts as (
     select
         roll_call_id,
+        session_id,
         party,
         sum(case when vote_text = 'Yea' then 1 else 0 end) as yeas,
         sum(case when vote_text = 'Nay' then 1 else 0 end) as nays
     from final_votes
-    group by roll_call_id, party
+    group by roll_call_id, session_id, party
 ),
 
 party_positions as (
     select
         roll_call_id,
+        session_id,
         party,
         case
             when yeas > nays then 'Yea'
@@ -36,6 +41,7 @@ party_positions as (
 
 select
     rc.roll_call_id,
+    rc.session_id,
     rep.majority_position as republican_position,
     dem.majority_position as democrat_position,
     coalesce(
@@ -44,7 +50,7 @@ select
         and rep.majority_position <> dem.majority_position,
         false
     ) as is_party_unity_vote
-from (select distinct roll_call_id from party_positions) as rc
+from (select distinct roll_call_id, session_id from party_positions) as rc
 left join party_positions as rep
     on rep.roll_call_id = rc.roll_call_id and rep.party = 'R'
 left join party_positions as dem

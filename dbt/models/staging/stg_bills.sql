@@ -1,6 +1,7 @@
 select
     bill_id,
     session_id,
+    data->'bill'->'session'->>'session_name'             as session_name,
     change_hash,
     data->'bill'->>'bill_number'                         as bill_number,
     data->'bill'->>'title'                               as title,

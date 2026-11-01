@@ -1,11 +1,12 @@
 with unity_votes as (
-    select roll_call_id, republican_position, democrat_position
+    select roll_call_id, session_id, republican_position, democrat_position
     from {{ ref('int_party_positions') }}
     where is_party_unity_vote
 ),
 
 legislator_votes as (
     select
+        u.session_id,
         v.people_id,
         p.name,
         p.party,
@@ -25,6 +26,7 @@ legislator_votes as (
 )
 
 select
+    session_id,
     people_id,
     name,
     party,
@@ -37,4 +39,4 @@ select
         1
     ) as party_unity_pct
 from legislator_votes
-group by people_id, name, party, chamber, district_code
+group by session_id, people_id, name, party, chamber, district_code
