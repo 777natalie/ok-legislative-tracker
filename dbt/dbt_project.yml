@@ -1,0 +1,12 @@
+name: ok_legislature
+version: "1.0.0"
+profile: ok_legislature
+
+model-paths: ["models"]
+test-paths: ["tests"]
+
+models:
+  ok_legislature:
+    staging:
+      +materialized: view
+      +schema: staging

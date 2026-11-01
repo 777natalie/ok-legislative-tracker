@@ -11,3 +11,12 @@ __pycache__/
 
 #data
 data/
+
+# dbt
+dbt/target/
+dbt/logs/
+dbt/dbt_packages/
+
+dbt/target/
+dbt/logs/
+dbt/dbt_packages/
