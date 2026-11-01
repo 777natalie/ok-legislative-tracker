@@ -1,0 +1,13 @@
+ok_legislature:
+  target: default
+  outputs:
+    default:
+      type: postgres
+      host: "{{ env_var('PGHOST') }}"
+      port: "{{ env_var('PGPORT', '5432') | as_number }}"
+      user: "{{ env_var('PGUSER') }}"
+      password: "{{ env_var('PGPASSWORD', '') }}"
+      dbname: "{{ env_var('PGDATABASE') }}"
+      schema: analytics
+      threads: 4
+      sslmode: "{{ env_var('PGSSLMODE', 'prefer') }}"

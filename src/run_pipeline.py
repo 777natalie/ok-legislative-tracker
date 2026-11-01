@@ -22,7 +22,8 @@ from psycopg.types.json import Jsonb
 from legiscan_client import call_api
 
 load_dotenv()
-DATABASE_URL = os.getenv("DATABASE_URL")
+# Empty means "use the standard PGHOST / PGUSER / PGPASSWORD / PGDATABASE variables"
+DATABASE_URL = os.getenv("DATABASE_URL", "")
 STATE = os.getenv("LEGISCAN_STATE", "OK")
 TRACK_FROM_YEAR = int(os.getenv("TRACK_FROM_YEAR", "2026"))
 RAW_DIR = Path(os.getenv("RAW_DIR", "data/raw"))
@@ -157,7 +158,8 @@ def record_dataset(conn, ds):
 # ---------- Transform ----------
 
 def run_dbt():
-    result = subprocess.run(["dbt", "build"], cwd=DBT_DIR)
+    # --profiles-dir . uses dbt/profiles.yml from the repo, which reads the same PG* variables
+    result = subprocess.run(["dbt", "build", "--profiles-dir", "."], cwd=DBT_DIR)
     if result.returncode != 0:
         sys.exit("dbt build failed. Marts were not updated.")
 
@@ -165,6 +167,7 @@ def run_dbt():
 # ---------- Main ----------
 
 def main(force=False):
+    print(f"Target database: {os.getenv('PGHOST', 'localhost')} / {os.getenv('PGDATABASE', '?')}")
     now = datetime.now(timezone.utc)
     published = last_dataset_publication(now)
 

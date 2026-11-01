@@ -9,7 +9,7 @@ from psycopg.types.json import Jsonb
 load_dotenv()
 API_URL = "https://api.legiscan.com/"
 API_KEY = os.getenv("LEGISCAN_API_KEY")
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = os.getenv("DATABASE_URL", "")
 MONTHLY_LIMIT = int(os.getenv("LEGISCAN_MONTHLY_LIMIT", "8000"))
 MIN_SECONDS_BETWEEN_CALLS = 0.5
 
