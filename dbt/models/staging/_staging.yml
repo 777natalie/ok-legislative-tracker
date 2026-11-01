@@ -31,3 +31,20 @@ models:
       - name: people_id
         data_tests:
           - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_people')
+                field: people_id
+
+  - name: stg_people
+    columns:
+      - name: people_id
+        data_tests:
+          - unique
+          - not_null
+      - name: chamber
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["House", "Senate"]
