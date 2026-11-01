@@ -7,6 +7,8 @@ test-paths: ["tests"]
 
 models:
   ok_legislature:
+    +grants:
+      select: ["dashboard_reader"]
     staging:
       +materialized: view
       +schema: staging
