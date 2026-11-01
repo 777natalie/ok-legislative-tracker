@@ -1,0 +1,32 @@
+name: Daily pipeline
+
+on:
+  schedule:
+    - cron: "0 12 * * *"   # every day at 12:00 UTC (6am Central in winter, 7am in summer)
+  workflow_dispatch:        # adds a "Run workflow" button for manual runs
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run pipeline
+        run: python src/run_pipeline.py
+        env:
+          LEGISCAN_API_KEY: ${{ secrets.LEGISCAN_API_KEY }}
+          PGHOST: ${{ secrets.PGHOST }}
+          PGPORT: "5432"
+          PGDATABASE: postgres
+          PGUSER: ${{ secrets.PGUSER }}
+          PGPASSWORD: ${{ secrets.PGPASSWORD }}
+          PGSSLMODE: require
