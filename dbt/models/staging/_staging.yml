@@ -7,6 +7,12 @@ models:
         data_tests:
           - unique
           - not_null
+      - name: bill_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('stg_bills')
+                field: bill_id
       - name: chamber
         data_tests:
           - not_null
@@ -48,3 +54,13 @@ models:
           - accepted_values:
               arguments:
                 values: ["House", "Senate"]
+
+  - name: stg_bills
+    columns:
+      - name: bill_id
+        data_tests:
+          - unique
+          - not_null
+      - name: bill_number
+        data_tests:
+          - not_null
