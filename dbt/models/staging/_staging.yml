@@ -64,3 +64,29 @@ models:
       - name: bill_number
         data_tests:
           - not_null
+
+  - name: stg_bill_actions
+    columns:
+      - name: bill_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_bills')
+                field: bill_id
+      - name: action_date
+        data_tests:
+          - not_null
+
+  - name: stg_bill_versions
+    columns:
+      - name: bill_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_bills')
+                field: bill_id
+      - name: change_hash
+        data_tests:
+          - not_null

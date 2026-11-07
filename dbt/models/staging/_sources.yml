@@ -7,3 +7,4 @@ sources:
       - name: bills
       - name: roll_calls
       - name: people
+      - name: bill_versions
