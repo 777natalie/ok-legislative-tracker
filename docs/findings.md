@@ -119,3 +119,6 @@ Lowest scores in the 2026 session ranged from 41.1% to about 75%, and included b
 - [ ] How many of the 6,008 bills are carryovers from 2025?
 - [ ] How often is `subjects` filled in across all bills?
 - [ ] What exactly is "fourth reading" in Oklahoma's process? Confirm with the Legislature's own rules.
+
+
+Nov 7: getMasterListRaw change_hash matches dataset change_hash for all 6,008 bills in session 2219. Daily change detection costs 1 call/day plus 1 getBill per changed bill.
