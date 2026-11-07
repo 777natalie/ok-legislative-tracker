@@ -21,7 +21,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run pipeline
-        run: python src/run_pipeline.py
+        run: python -u src/run_pipeline.py
         env:
           LEGISCAN_API_KEY: ${{ secrets.LEGISCAN_API_KEY }}
           PGHOST: ${{ secrets.PGHOST }}
