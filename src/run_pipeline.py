@@ -1,4 +1,4 @@
-"""Run the whole pipeline: check LegiScan for new datasets, load them, run dbt.
+"""Run the whole pipeline: weekly datasets, daily bill updates, then dbt.
 
 Usage:
     python src/run_pipeline.py           # normal run
@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 from psycopg.types.json import Jsonb
 
 from legiscan_client import call_api
+from update_bills import update_changed_bills
 
 load_dotenv()
 # Empty means "use the standard PGHOST / PGUSER / PGPASSWORD / PGDATABASE variables"
@@ -115,6 +116,15 @@ def load_dataset(conn, dataset_dir):
             """,
             bills,
         )
+        # Append-only history: a version is stored once, never updated or deleted.
+        cur.executemany(
+            """
+            INSERT INTO raw.bill_versions (bill_id, change_hash, source, data)
+            VALUES (%s, %s, 'dataset', %s)
+            ON CONFLICT (bill_id, change_hash) DO NOTHING
+            """,
+            [(bill_id, change_hash, data) for bill_id, _, change_hash, data in bills],
+        )
         cur.executemany(
             """
             INSERT INTO raw.roll_calls (roll_call_id, bill_id, data)
@@ -172,6 +182,7 @@ def main(force=False):
     published = last_dataset_publication(now)
 
     with psycopg.connect(DATABASE_URL) as conn:
+        # 1. Weekly: full datasets, only when LegiScan has published since the last check
         if not force and dataset_list_checked_since(conn, published):
             print(
                 f"Dataset list already checked since LegiScan's last publication "
@@ -197,6 +208,11 @@ def main(force=False):
                 conn.commit()
                 print(f"    loaded {bills} bills, {roll_calls} roll calls, {people} people")
 
+        # 2. Daily: fetch only bills whose change_hash moved, within today's budget.
+        # Runs after the datasets, so it also corrects any bill a dataset overwrote with older data.
+        update_changed_bills(conn)
+
+    # 3. Transform and test
     run_dbt()
 
 
