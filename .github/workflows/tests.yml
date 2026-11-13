@@ -24,3 +24,55 @@ jobs:
 
       - name: Run unit tests
         run: python -m pytest -v
+
+  dbt:
+    # Builds the whole database from scratch in a throwaway Postgres:
+    # migrations -> sample data -> dbt models and data tests.
+    # No secrets: the password below only exists inside this temporary container.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+      PGSSLMODE: disable
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Create tables from migrations
+        run: |
+          for f in sql/*.sql; do
+            psql -v ON_ERROR_STOP=1 -f "$f"
+          done
+          psql -v ON_ERROR_STOP=1 -c "CREATE ROLE dashboard_reader;"
+
+      - name: Load sample data twice (checks the upserts)
+        run: python tests/load_sample_data.py
+        env:
+          PYTHONPATH: src
+
+      - name: dbt build
+        working-directory: dbt
+        run: dbt build --profiles-dir .

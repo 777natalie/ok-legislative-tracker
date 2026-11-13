@@ -2,22 +2,26 @@
 
 An automated data pipeline and public dashboard showing how Oklahoma legislators vote when the two parties split.
 
+[![Tests](https://github.com/777natalie/ok-legislative-tracker/actions/workflows/tests.yml/badge.svg)](https://github.com/777natalie/ok-legislative-tracker/actions/workflows/tests.yml)
+
 **Live dashboard:** https://ok-legislative-tracker.streamlit.app
 
-**Status:** Running daily on GitHub Actions with a hosted PostgreSQL database (Supabase), 37 passing dbt models and tests, and a public dashboard. Daily bill-level updates for the 2027 session are next.
+**Status:** Running daily on GitHub Actions against a hosted PostgreSQL database (Supabase). Each run checks for new weekly datasets, re-fetches only the bills that changed, and rebuilds and tests every dbt model (11 models, 37 data tests). Every push runs 17 Python unit tests and rebuilds the whole database from scratch in CI.
 
 | | |
 |---|---|
-| **Stack** | Python · PostgreSQL · dbt · GitHub Actions · Supabase · Streamlit |
+| **Stack** | Python · PostgreSQL · dbt · GitHub Actions · Supabase · Streamlit · pytest |
 | **Data** | [LegiScan API](https://legiscan.com/legiscan): 6,008 bills, 8,604 roll calls, 154 legislators (2026 session) |
 
 ## What it does
 
 - **Finds Oklahoma's legislative sessions automatically**, so new sessions (like 2027) are picked up without code changes.
 - **Downloads each session as one dataset file** and skips it when LegiScan's `dataset_hash` has not changed.
-- **Checks for new data only after LegiScan publishes** (Sundays), so it runs daily while making about one dataset call a week.
-- **Guards the API budget.** Every call goes through one client that waits between requests, logs the call to the database, and refuses to run past 8,000 calls a month (the free limit is 10,000).
-- **Loads raw JSON into PostgreSQL** with upserts. Each session's hash is saved in the same transaction as its load, so a failed load is retried rather than skipped.
+- **Checks for new datasets only after LegiScan publishes** (Sundays), so it runs daily while making about one dataset call a week.
+- **Updates changed bills daily.** One master list call returns every bill's `change_hash`; only bills whose hash changed are re-fetched, within a daily budget.
+- **Keeps every version of every bill.** `raw.bill_versions` is append-only: a version is stored once and never updated or deleted, so status changes can be tracked over time.
+- **Guards the API budget.** Every call goes through one client that checks the monthly count, waits between requests, and logs the call to the database. It refuses to run past 8,000 calls a month (the free limit is 10,000), and the daily bill updates spread the remaining calls over the rest of the month, keeping 50 in reserve for the weekly dataset job.
+- **Loads raw JSON into PostgreSQL** with upserts, so re-running never duplicates data. Each session's hash is saved in the same transaction as its load, so a failed load is retried rather than skipped, and each updated bill is committed on its own.
 - **Transforms and tests with dbt** on every run. A failed test fails the run.
 - **Publishes a dashboard** of party unity scores per legislator, per session, with the specific bills where each legislator voted against their party's majority.
 
@@ -27,7 +31,7 @@ An automated data pipeline and public dashboard showing how Oklahoma legislators
 flowchart LR
     A[LegiScan API] -->|budget guard<br/>+ call log| B[run_pipeline.py]
     G[GitHub Actions<br/>daily 12:00 UTC] -.-> B
-    B -->|new or changed<br/>sessions only| C
+    B -->|weekly: changed sessions<br/>daily: changed bills| C
     subgraph S[Supabase PostgreSQL]
         C[(raw)] --> D[(staging)] --> E[(intermediate)] --> F[(marts)]
     end
@@ -41,36 +45,56 @@ One command runs the whole pipeline, locally or in GitHub Actions:
 python src/run_pipeline.py
 ```
 
-1. If LegiScan has published since the last check, call `getDatasetList` and find every session ending in 2026 or later.
-2. For each session whose `dataset_hash` changed, download the dataset (a Base64-encoded ZIP), unzip it, and upsert every bill, roll call and person into the `raw` schema.
-3. Run `dbt build`: create the models, run all tests, and grant the dashboard read access.
+1. **Weekly datasets.** If LegiScan has published since the last check, call `getDatasetList`, find every session ending in 2026 or later, and download each session whose `dataset_hash` changed (a Base64-encoded ZIP). Every bill, roll call and person is upserted into the `raw` schema.
+2. **Daily bill updates.** Call `getMasterListRaw` once, compare each bill's `change_hash` with the stored one, and call `getBill` for changed or new bills, up to today's budget. Bills left over are picked up on later runs.
+3. **Transform and test.** Run `dbt build`: create the models, run all data tests, and grant the dashboard read access.
 
 ## Data model
 
 | Layer | Models | What happens |
 |---|---|---|
-| staging | `stg_bills`, `stg_roll_calls`, `stg_votes`, `stg_people` | Flatten JSON, cast types, decode codes (chamber, bill status), flag carryover bills, classify each roll call as `committee`, `final_passage`, `veto_override`, `emergency` or `procedural` |
+| staging | `stg_bills`, `stg_roll_calls`, `stg_votes`, `stg_people`, `stg_bill_versions`, `stg_bill_actions` | Flatten JSON, cast types, decode codes (chamber, bill status), flag carryover bills, classify each roll call as `committee`, `final_passage`, `veto_override`, `emergency` or `procedural`, and list each bill's official actions in order |
 | intermediate | `int_party_positions` | Each party's majority position on every final passage vote, and whether the parties split |
-| marts | `dim_legislators`, `fct_unity_votes`, `legislator_party_unity` | One row per legislator; one row per legislator per party-line vote; one party unity score per legislator per session |
+| marts | `dim_legislators`, `fct_unity_votes`, `legislator_party_unity`, `fct_bill_changes` | One row per legislator; one row per legislator per party-line vote; one party unity score per legislator per session; one row per bill version compared with the version before it (status changes, new actions) |
 
 `legislator_party_unity` is built from `fct_unity_votes`, so the scores and the vote lists on the dashboard always agree.
 
-### Data tests
+## Testing
 
-29 tests run on every build, including:
+### Data tests (dbt)
+
+37 data tests run on every pipeline run and in CI, including:
 
 - Unique and not-null keys on every model
 - Allowed values for chamber, party and vote category
 - Every vote links to a real roll call and person; every roll call links to a real bill
 - No legislator votes twice on one roll call
 - **Vote rows reconcile with LegiScan's own yea/nay/absent totals for every roll call**
-- One party unity row per legislator per session
+- One row per bill version, per bill action, and per legislator per session
+
+### Unit tests (pytest)
+
+17 tests in `tests/` cover the logic that decides what to fetch and how many API calls to spend. They use fakes for the database and HTTP, so they never call LegiScan or touch a real database.
+
+| File | What it checks |
+|---|---|
+| `test_call_api.py` | At the monthly limit, no request is sent. Every call, including failed ones, is logged before an error is raised. The API key is sent but never logged. |
+| `test_budget.py` | The daily budget is capped, spread over the days left in the month, keeps 50 calls in reserve, and is never negative. |
+| `test_change_detection.py` | Unchanged bills are skipped; changed and new bills are fetched, in `bill_id` order. |
+| `test_dataset_schedule.py` | The weekly dataset check uses the right Sunday publication time, including just before and at publication. |
+
+### Continuous integration
+
+`.github/workflows/tests.yml` runs on every push and pull request, with no secrets:
+
+1. **pytest:** the 17 unit tests.
+2. **dbt:** starts a throwaway PostgreSQL, applies every migration in `sql/`, loads a small sample of real LegiScan data (`tests/fixtures/`: 2 bills, 7 roll calls, 154 legislators) twice to check that reloading changes nothing, then runs `dbt build`. This catches broken migrations, broken upserts and broken models before they reach the production database.
 
 ## Security
 
 - **Least privilege.** The pipeline uses an admin login stored in GitHub Secrets. The public dashboard uses a separate `dashboard_reader` role that can only `SELECT` from the transformed schemas. It has no access to raw data and cannot write anything. dbt re-applies these grants on every build.
-- **No secrets in the repo.** API keys and passwords live in git-ignored `.env` files locally, GitHub Secrets for the pipeline, and Streamlit secrets for the dashboard. `dbt/profiles.yml` only reads environment variables.
-- **The API key is never logged.** The call log stores the operation and its other parameters only.
+- **No secrets in the repo.** API keys and passwords live in git-ignored `.env` files locally, GitHub Secrets for the pipeline, and Streamlit secrets for the dashboard. `dbt/profiles.yml` only reads environment variables. The CI workflow uses no secrets, and its token can only read the repository.
+- **The API key is never logged.** The call log stores the operation and its other parameters only. A unit test enforces this.
 
 ## Findings
 
@@ -93,7 +117,7 @@ git clone https://github.com/777natalie/ok-legislative-tracker.git
 cd ok-legislative-tracker
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ```
 
 Create a `.env` file. The database settings are the standard PostgreSQL environment variables, read by Python, dbt and `psql`:
@@ -105,22 +129,27 @@ PGDATABASE=ok_legislature
 PGUSER=your_username
 ```
 
-Create the database and tables, and the role the dbt grants refer to:
+Create the database, apply the migrations in order, and create the role the dbt grants refer to:
 
 ```bash
 createdb ok_legislature
-psql ok_legislature -f sql/001_create_raw_tables.sql
-psql ok_legislature -f sql/002_create_meta_tables.sql
-psql ok_legislature -f sql/003_create_dataset_state.sql
+for f in sql/*.sql; do psql ok_legislature -v ON_ERROR_STOP=1 -f "$f"; done
 psql ok_legislature -c "CREATE ROLE dashboard_reader;"
 ```
 
-Run the pipeline, then the dashboard:
+Check that your API key works (uses one API call), then run the pipeline and the dashboard:
 
 ```bash
+python src/check_api_key.py
 python src/run_pipeline.py --force
 pip install -r app/requirements.txt
 streamlit run app/dashboard.py
+```
+
+Run the unit tests (no API key or database needed):
+
+```bash
+python -m pytest -v
 ```
 
 ### Optional settings
@@ -130,6 +159,7 @@ streamlit run app/dashboard.py
 | `LEGISCAN_STATE` | `OK` | State to track |
 | `TRACK_FROM_YEAR` | `2026` | Track sessions ending in this year or later |
 | `LEGISCAN_MONTHLY_LIMIT` | `8000` | Stop making API calls past this many in a month |
+| `MAX_BILLS_PER_RUN` | `200` | Most bills the daily update fetches in one run |
 | `RAW_DIR` | `data/raw` | Where downloaded files are unzipped |
 
 ## Project structure
@@ -137,12 +167,15 @@ streamlit run app/dashboard.py
 ```
 ok-legislative-tracker/
 ├── .github/workflows/
-│   └── pipeline.yml         # daily scheduled run
+│   ├── pipeline.yml         # daily scheduled run
+│   └── tests.yml            # unit tests + full database rebuild on every push
 ├── src/
 │   ├── legiscan_client.py   # every API call: budget guard, rate limit, call log
-│   ├── run_pipeline.py      # discover sessions, download, load, dbt build
-│   └── test_api.py          # quick check that the API key works
-├── sql/                     # raw, meta and dataset-state tables
+│   ├── run_pipeline.py      # weekly datasets, daily bill updates, dbt build
+│   ├── update_bills.py      # daily change_hash comparison and bill updates
+│   ├── check_api_key.py     # one-call check that the API key works
+│   └── probe_masterlist.py  # one-off exploration of the master list
+├── sql/                     # migrations, applied in numeric order
 ├── dbt/
 │   ├── profiles.yml         # reads PG* environment variables
 │   ├── models/
@@ -150,23 +183,35 @@ ok-legislative-tracker/
 │   │   ├── intermediate/
 │   │   └── marts/
 │   └── tests/               # custom data tests
+├── tests/                   # pytest unit tests
+│   ├── fixtures/            # small LegiScan sample used in CI
+│   └── load_sample_data.py  # loads the sample in CI before dbt build
 ├── app/
 │   ├── dashboard.py         # Streamlit dashboard (reads marts)
 │   └── requirements.txt
 ├── docs/
 │   ├── findings.md          # what the data shows
 │   └── PLAN.md              # where the project is going
-└── requirements.txt         # pipeline dependencies
+├── requirements.txt         # pipeline dependencies
+└── requirements-dev.txt     # pipeline dependencies + pytest
 ```
+
+## Known limitations
+
+- **One pipeline run at a time.** The budget check counts this month's calls and then makes the call. That is safe with a single scheduled run; two runs at once could both pass the check.
+- **Daily updates go in `bill_id` order.** If more bills change than the daily budget allows for several days in a row, the highest `bill_id`s wait the longest. This only matters in the busiest weeks of a session.
+- **GitHub disables scheduled workflows after 60 days without repository activity** on public repos, so the daily run needs an occasional commit or a manual run.
 
 ## Next steps
 
 - [x] Hosted PostgreSQL (Supabase) and a daily GitHub Actions schedule
 - [x] Public dashboard with a read-only database role
-- [ ] Daily bill-level updates during session using LegiScan's `change_hash`, within the API budget
-- [ ] CI checks on every push: unit tests for the API client and a dbt build
+- [x] Daily bill-level updates using LegiScan's `change_hash`, within the API budget
+- [x] Append-only bill version history and bill change log
+- [x] CI on every push: unit tests and a full database rebuild with dbt
 - [ ] Dashboard polish: links to each bill, legislator search
+- [ ] Read-only views and access rules for a future mobile app
 
 ## Data credit
 
-Legislative data provided by [LegiScan](https://legiscan.com), licensed under [Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/). This project is independent and not affiliated with LegiScan or the Oklahoma Legislature.
+Legislative data provided by [LegiScan](https://legiscan.com), licensed under [Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/). This includes the sample files in `tests/fixtures/`. This project is independent and not affiliated with LegiScan or the Oklahoma Legislature.
