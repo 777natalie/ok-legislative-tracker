@@ -5,6 +5,7 @@ select
     change_hash,
     data->'bill'->>'bill_number'                         as bill_number,
     data->'bill'->>'title'                               as title,
+    data->'bill'->>'state_link'                          as state_url,
     case data->'bill'->>'body'
         when 'H' then 'House'
         when 'S' then 'Senate'
@@ -27,5 +28,6 @@ select
         where s->>'type' = 'Carry Over'
     )                                                    as is_carryover,
     jsonb_array_length(coalesce(data->'bill'->'subjects', '[]'::jsonb))
-                                                         as subject_count
+                                                         as subject_count,
+    loaded_at 
 from {{ source('raw', 'bills') }}

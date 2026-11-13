@@ -13,6 +13,7 @@ votes as (
         r.bill_id,
         b.bill_number,
         b.title,
+        b.state_url,
         p.party,
         v.vote_text,
         case p.party
