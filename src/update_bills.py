@@ -30,6 +30,14 @@ def todays_budget(conn):
     return max(0, min(MAX_BILLS_PER_RUN, remaining // days_left))
 
 
+def find_changed_bills(master, stored):
+    """Bills that are new or whose change_hash differs from the stored one, by bill_id."""
+    return sorted(
+        (b for b in master if stored.get(b["bill_id"]) != b["change_hash"]),
+        key=lambda b: b["bill_id"],
+    )
+
+
 def update_changed_bills(conn, master_data=None, dry_run=False):
     with conn.cursor() as cur:
         cur.execute("SELECT MAX(session_id) FROM raw.bills")
@@ -41,10 +49,7 @@ def update_changed_bills(conn, master_data=None, dry_run=False):
 
     data = master_data or call_api("getMasterListRaw", id=session_id)
     master = [b for k, b in data["masterlist"].items() if k != "session"]
-    changed = sorted(
-        (b for b in master if stored.get(b["bill_id"]) != b["change_hash"]),
-        key=lambda b: b["bill_id"],
-    )
+    changed = find_changed_bills(master, stored)
     to_fetch = changed[:budget]
 
     print(f"Session {session_id}: {len(master)} bills, {len(changed)} changed or new.")
