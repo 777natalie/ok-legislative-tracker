@@ -73,6 +73,13 @@ jobs:
         env:
           PYTHONPATH: src
 
+
+      - name: Simulate a daily bill update
+        run: python tests/simulate_daily_update.py
+        env:
+          PYTHONPATH: src
+
+
       - name: dbt build
         working-directory: dbt
         run: dbt build --profiles-dir .

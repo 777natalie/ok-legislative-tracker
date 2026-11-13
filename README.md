@@ -88,7 +88,7 @@ python src/run_pipeline.py
 `.github/workflows/tests.yml` runs on every push and pull request, with no secrets:
 
 1. **pytest:** the 17 unit tests.
-2. **dbt:** starts a throwaway PostgreSQL, applies every migration in `sql/`, loads a small sample of real LegiScan data (`tests/fixtures/`: 2 bills, 7 roll calls, 154 legislators) twice to check that reloading changes nothing, then runs `dbt build`. This catches broken migrations, broken upserts and broken models before they reach the production database.
+2. **dbt:** starts a throwaway PostgreSQL, applies every migration in `sql/`, loads a small sample of real LegiScan data (`tests/fixtures/`: 2 bills, 7 roll calls, 154 legislators) twice to check that reloading changes nothing, simulates one daily bill update with a faked LegiScan response, then runs `dbt build`. This catches broken migrations, broken upserts and broken models before they reach the production database.
 
 ## Security
 
