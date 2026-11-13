@@ -6,7 +6,7 @@ An automated data pipeline and public dashboard showing how Oklahoma legislators
 
 **Live dashboard:** https://ok-legislative-tracker.streamlit.app
 
-**Status:** Running daily on GitHub Actions against a hosted PostgreSQL database (Supabase). Each run checks for new weekly datasets, re-fetches only the bills that changed, and rebuilds and tests every dbt model (11 models, 37 data tests). Every push runs 17 Python unit tests and rebuilds the whole database from scratch in CI.
+**Status:** Live. Runs daily on GitHub Actions against Supabase Postgres, fetching only what changed in LegiScan; any failing dbt data test fails the run. Every push runs the unit tests and rebuilds the schema and models on sample data in CI.
 
 | | |
 |---|---|
