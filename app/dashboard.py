@@ -1,7 +1,8 @@
 """Oklahoma Legislative Vote Tracker dashboard.
 
 Run locally:  streamlit run app/dashboard.py
-Reads only dbt marts. Database connection comes from the standard PG* variables in .env.
+Reads only dbt models (staging, intermediate and marts), never raw or meta, so it runs
+as the read-only dashboard_reader role. Connection comes from the standard PG* variables.
 """
 import os
 
@@ -60,7 +61,7 @@ summary = query(
     """,
     (session_id,),
 ).iloc[0]
-as_of = query("SELECT MAX(loaded_at) AS loaded_at FROM meta.datasets").iloc[0]["loaded_at"]
+as_of = query("SELECT MAX(loaded_at) AS loaded_at FROM analytics_staging.stg_bills").iloc[0]["loaded_at"]
 
 c1, c2, c3 = st.columns(3)
 c1.metric("Final passage votes", f"{int(summary['final_votes']):,}")
@@ -70,7 +71,7 @@ c3.metric(
     f"{100 * summary['party_line_votes'] / summary['final_votes']:.0f}%",
 )
 if as_of is not None:
-    st.caption(f"Data last loaded {as_of:%B %d, %Y}.")
+    st.caption(f"Data last updated {as_of:%B %d, %Y}.")
 
 st.info(
     "**Party-line vote:** a final passage vote where most Republicans and most Democrats "
@@ -90,7 +91,7 @@ min_votes = f3.slider("Minimum party-line votes cast", 0, 300, 50, step=10)
 
 scores = query(
     """
-    SELECT name, party, chamber, district_code, unity_votes_cast, votes_with_party, party_unity_pct
+    SELECT people_id, name, party, chamber, district_code, unity_votes_cast, votes_with_party, party_unity_pct
     FROM analytics_marts.legislator_party_unity
     WHERE session_id = %s
     ORDER BY party_unity_pct
@@ -104,7 +105,7 @@ shown = scores[
 ]
 
 st.dataframe(
-    shown,
+    shown.drop(columns="people_id"),
     hide_index=True,
     width="stretch",
     column_config={
@@ -135,9 +136,13 @@ people = query(
     """,
     (session_id,),
 )
-choice = st.selectbox("Legislator", people["name"])
-person = people[people["name"] == choice].iloc[0]
-score = scores[scores["name"] == choice].iloc[0]
+people["label"] = (
+    people["name"] + " (" + people["party"] + ", " + people["district_code"].fillna("") + ")"
+)
+choice = st.selectbox("Legislator (type a name or district, e.g. HD-037)", people["label"])
+person = people[people["label"] == choice].iloc[0]
+score = scores[scores["people_id"] == person["people_id"]].iloc[0]
+
 
 left, right = st.columns([1, 3])
 with left:
@@ -157,7 +162,7 @@ with right:
 
 breaks = query(
     """
-    SELECT vote_date, bill_number, title, vote_text AS their_vote, party_position
+    SELECT vote_date, bill_number, title, state_url, vote_text AS their_vote, party_position
     FROM analytics_marts.fct_unity_votes
     WHERE session_id = %s AND people_id = %s AND NOT voted_with_party
     ORDER BY vote_date DESC
@@ -173,6 +178,7 @@ st.dataframe(
         "vote_date": "Date",
         "bill_number": "Bill",
         "title": "Title",
+        "state_url": st.column_config.LinkColumn("Official page", display_text="View bill"),
         "their_vote": "Their vote",
         "party_position": "Party majority",
     },
