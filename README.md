@@ -209,7 +209,7 @@ ok-legislative-tracker/
 - [x] Daily bill-level updates using LegiScan's `change_hash`, within the API budget
 - [x] Append-only bill version history and bill change log
 - [x] CI on every push: unit tests and a full database rebuild with dbt
-- [ ] Dashboard polish: links to each bill, legislator search
+- [x] Dashboard polish: links to each bill, legislator search
 - [ ] Read-only views and access rules for a future mobile app
 
 ## Data credit
